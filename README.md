@@ -56,11 +56,11 @@ causing co-channel interference with the Time Capsule sitting next to it.
 
 A published hardware mod for this exact problem: the board carries two shielded
 Atheros Wi-Fi modules fed by an 8-pin **TPS54328** buck regulator ("54328").
-Its pins 6–7 (Vout) feed both Wi-Fi chips; pin 1 is the enable line (3.3 V).
-Grounding pin 1 shuts the regulator down and kills the radios while DOCSIS and
-wired Ethernet keep working — reportedly dropping idle draw from ~14.9 W to
-~12.5 W. Documented here as reference for the interference problem above; this
-is a published mod, researched — not one I performed on my unit.
+Per the writeup, pulling the regulator's enable line (pin 1) low shuts the
+regulator down and kills the radios while DOCSIS and wired Ethernet keep
+working — reportedly dropping idle draw from ~14.9 W to ~12.5 W. Documented
+here as reference for the interference problem above; this is a third-party
+writeup I researched — not a mod I performed on my unit.
 
 ## Explicit non-claims
 
