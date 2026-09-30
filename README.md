@@ -1,7 +1,14 @@
-# XB3 Hardware Notes
+# XB3 — UART boot-log capture and board analysis of the Xfinity XB3 gateway
 
-Board-level analysis of the Xfinity XB3 gateway (Arris TG1682 family, Intel Puma 6).
-All work performed on my own pre-paid unit.
+My ISP gateway kept broadcasting hidden SSIDs in bridge mode — the `xfinitywifi`
+hotspot, mesh backhaul — with no software toggle to kill the radios, causing
+co-channel interference with the router sitting next to it. So I opened up my
+own pre-paid unit (Arris TG1682, Intel Puma 6) and did board-level hardware
+diagnostics: found the unpopulated J3 UART header by the main SoC, captured the
+full boot log read-only, and mapped every header on the board.
+
+**Scope:** personally-owned pre-paid hardware on my own bench, read-only
+throughout — no writes, no firmware extraction, no third-party systems.
 
 ## The device
 
