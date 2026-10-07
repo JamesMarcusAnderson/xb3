@@ -1,80 +1,69 @@
-# XB3 — UART boot-log capture and board analysis of the Xfinity XB3 gateway
+# XB3 — ARRIS TG1682 Board-Level Hardware Notes
 
-My ISP gateway kept broadcasting hidden SSIDs in bridge mode — the `xfinitywifi`
-hotspot, mesh backhaul — with no software toggle to kill the radios, causing
-co-channel interference with the router sitting next to it. So I opened up my
-own pre-paid unit (Arris TG1682, Intel Puma 6) and did board-level hardware
-diagnostics: found the unpopulated J3 UART header by the main SoC, captured the
-full boot log read-only, and mapped every header on the board.
+Board-level analysis of the Xfinity XB3 gateway (ARRIS TG1682, Intel Puma 6
+SoC). The work covers identifying the board's debug interfaces at the hardware
+level, capturing the UART boot log, and a physical board modification to take
+bridge-mode control from ISP firmware on owned hardware.
 
-**Scope:** personally-owned pre-paid hardware on my own bench, read-only
-throughout — no writes, no firmware extraction, no third-party systems.
+> Personal research on owned hardware (pre-paid unit, no lease). Read-only,
+> defensive posture. See REVIEW.md for corrections and open questions.
 
-## The device
+## Device
 
-- **Xfinity XB3** — Arris TG1682P (board silkscreen: TG1682/TG2472)
-- **SoC:** Intel Puma 6 ("Cat Mountain D0" per the boot ROM banner)
-- 256 MB DRAM, ~231 MB eMMC ("MMC256"), U-Boot 1.2.0 / PSPU-Boot 4.2.0.45, Linux 3.12.14 (ARM)
-- U-Boot reports `Board-Type: harborpark-mg`, boots the `UBFI1` image from eMMC
+![Annotated TG1682 board diagram](docs/images/board-diagram.webp)
 
-## J3 UART bring-up
+*Stylized layout — verify against the physical board. See REVIEW.md for
+diagram accuracy notes.*
 
-Opened the enclosure and located the unpopulated 4-pin **J3** header next to the
-main SoC. Wired it to a [Glasgow Interface Explorer](https://glasgow-embedded.org/)
-running the `uart` applet at 3.3 V — three jumpers on J3 pins 2/3/4 (RX, TX, GND) —
-and captured the full boot log **read-only**:
+| Item | Value |
+|---|---|
+| Model | ARRIS TG1682 (XB3), board labeled TG1682/TG2472 |
+| SoC | Intel Puma 6 (DHCE2652), dual-core 1.2 GHz (ARM) |
+| Boot ROM | "Cat Mountain D0" v0.1.16 |
+| Bootloader | U-Boot 1.2.0 / PSPU-Boot 4.2.0.45 |
+| Kernel | Linux 3.12.14 (built 2020-07-24), BusyBox v1.22.1 |
+| DRAM | 256 MB |
+| Flash | eMMC 231 MB ("MMC256"), board type `harborpark-mg` |
+
+## Timeline
+
+- **2025-07-24 → 2025-07-26** — USB-C/micro-USB cable pinout research (multimeter +
+  Glasgow); Glasgow logic-analyzer bring-up
+- **2026-03-31** — bridge-mode hardware-hack investigation
+- **2026-04-04** — USB-A port (J1/J2) documentation dragnet; J3 UART boot log captured
+- **2026-04-13** — U415 pin-8 mod performed (WiFi radios killed); bridge-mode setup
+  with AirPort Time Capsule 6th gen as router
+- **2026-06-30** — post-mod security review
+
+## Key findings
+
+1. **J1/J2 (USB-A ports)** — Official docs claim USB 2.0 host ("future support for
+   external USB devices"). In practice the USB stack never initializes (see
+   `docs/usb-ports-analysis.md`). True electrical function still unverified; JTAG
+   is the working hypothesis, unproven.
+2. **J3 (4-pin pads, near SoC)** — UART console, captured at 3.3 V via Glasgow
+   (`docs/uart-bootlog.md`). Full boot log from Boot ROM through Linux init.
+3. **U415 mod** — Severing pin 8 on U415 (8-pin buck regulator feeding the WiFi
+   modules, consistent with TI TPS54328) kills the 2.4/5 GHz radios. Verified:
+   WiFi LEDs off, wired Ethernet unaffected (`docs/u415-mod.md`).
+4. **Cable pinouts** — Full continuity + voltage tables for a locked-down
+   micro-USB↔USB-C cable (`docs/pinouts.md`).
+
+## File guide
 
 ```
-glasgow run uart -V 3.3 -a --rx A0 tty
+README.md                  this file
+REVIEW.md                  technical review: corrections, flags, open questions
+docs/usb-ports-analysis.md J1/J2 documentation dragnet and conclusions
+docs/u415-mod.md           pin-8 mod procedure, purpose, warnings
+docs/uart-bootlog.md       J3 UART capture notes and annotated boot log
+docs/pinouts.md            multimeter continuity/voltage tables
+docs/glossary.md           JTAG/UART/Puma 6 terminology
+docs/images/               diagrams (board, signals, mod, pinouts, boot, network)
 ```
 
-What the log shows: Boot ROM memory/parameter dump → U-Boot loading from eMMC →
-kernel decompression → Linux 3.12.14 boot on the Puma 6 (`Machine: puma6`).
-See [boot-log-excerpt.txt](boot-log-excerpt.txt) (MACs and host identifiers redacted).
+## References
 
-**No console access was obtained.** U-Boot is configured with a 0-second autoboot
-delay, and the UART never dropped to a shell — capture was strictly receive-only.
-
-## Header map (as identified on the board)
-
-| Header | Function |
-|--------|----------|
-| J1, J2 | USB-A ports |
-| J3     | UART (boot log, read-only) |
-| J4     | JTAG (identified, not exercised) |
-
-JTAG via J4 was mapped but no JTAG session was ever established — don't read more
-into it than that.
-
-## Hardware factory reset
-
-With the admin password unknown, I severed **pin 8 on U415** to force a factory
-reset, then reconfigured the unit from defaults.
-
-## Bridge mode
-
-The XB3 was put into bridge mode via the admin panel at `http://10.0.0.1/` and
-paired with an Apple AirPort Time Capsule (6th gen) as the actual router.
-Motivation: even in bridge mode the XB3 kept broadcasting hidden SSIDs
-(`xfinitywifi` hotspot, mesh backhaul) with no software toggle to kill the radios,
-causing co-channel interference with the Time Capsule sitting next to it.
-
-## Published Wi-Fi-disable mod (reference)
-
-A published hardware mod for this exact problem: the board carries two shielded
-Atheros Wi-Fi modules fed by an 8-pin **TPS54328** buck regulator ("54328").
-Per the writeup, pulling the regulator's enable line (pin 1) low shuts the
-regulator down and kills the radios while DOCSIS and wired Ethernet keep
-working — reportedly dropping idle draw from ~14.9 W to ~12.5 W. Documented
-here as reference for the interference problem above; this is a third-party
-writeup I researched — not a mod I performed on my unit.
-
-## Explicit non-claims
-
-- No shell/console access was ever gained on this device.
-- No JTAG debugging session was performed.
-- No firmware was extracted, modified, or redistributed.
-- This is **not** a power-optimization project — the Wi-Fi work was about
-  eliminating radio interference, full stop.
-- Nothing here bypasses ISP controls on anyone else's equipment. This was my
-  own pre-paid modem, opened and probed on my own bench.
+- pmarks-net, "Xfinity XB3 hardware mod: Disable WiFi and save 2 watts" —
+  https://gist.github.com/pmarks-net/af40dba69272806c1ec9cbe71429d2e7
+- Glasgow Digital Interface Explorer — https://glasgow-embedded.org/
